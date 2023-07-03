@@ -1,0 +1,111 @@
+import cv2
+import numpy as np
+import os
+# class RealTimeObjectDetection:
+    # def __init__(self,capture):
+    #     self.capture = capture
+        
+    #function to load data
+def load_data():
+    # readNet returns the pretrained model using weights and cfg
+    net = cv2.dnn.readNet("yolov7.weights", "yolov7.cfg")
+    # Set target backend and target device if cude is available
+    net.setPreferableBackend(cv2.dnn.DNN_BACKEND_CUDA)
+    net.setPreferableTarget(cv2.dnn.DNN_TARGET_CUDA)
+    # list to store the names of labels in dataset
+    classes = []
+    with open("coco.names", "r") as f:
+        classes = [line.strip() for line in f.readlines()] 
+    
+    # getting the names of the output layers
+    output_layers = [layer_name for layer_name in net.getUnconnectedOutLayersNames()]
+    # generating a random color combination for each label
+    colors = np.random.uniform(0, 255, size=(len(classes), 3))
+    return net, classes, colors, output_layers
+
+# # function to get the capture object
+# def start_webcam(self):
+#     cap = cv2.VideoCapture(self.capture)
+#     return cap
+
+# function to preprocess the image and getting the output from the model
+def detect_objects(img, net, outputLayers):			
+    # getting the preprocessed image (binary large object)
+    blob = cv2.dnn.blobFromImage(img, scalefactor=0.00392, size=(320, 320), mean=(0, 0, 0), swapRB=True, crop=False)
+    # setting the input
+    net.setInput(blob)
+    # performing the feedforward in the model
+    outputs = net.forward(outputLayers)
+    return blob, outputs
+
+# function to create contour
+def get_box_dimensions(outputs, height, width):
+    boxes = []
+    confs = []
+    class_ids = []
+    # iterating to each output 
+    for output in outputs:
+        # iterating to each of the rows in output matrix
+        for detect in output:
+            scores = detect[5:]
+            # getting the index of the maximum score
+            class_id = np.argmax(scores)
+            # getting the score value and storing it to the confidence
+            conf = scores[class_id]
+            if conf > 0.3:
+                center_x = int(detect[0] * width)
+                center_y = int(detect[1] * height)
+                w = int(detect[2] * width)
+                h = int(detect[3] * height)
+                x = int(center_x - w/2)
+                y = int(center_y - h / 2)
+                boxes.append([x, y, w, h])
+                confs.append(float(conf))
+                class_ids.append(class_id)
+    return boxes, confs, class_ids
+            
+def draw_labels(boxes, confs, colors, class_ids, classes, img,l=set()): 
+    # applying non max suppression 
+    indexes = cv2.dnn.NMSBoxes(boxes, confs, 0.5, 0.4)
+    font = cv2.FONT_HERSHEY_PLAIN
+    for i in range(len(boxes)):
+        if i in indexes:
+            x, y, w, h = boxes[i]
+            label = str(classes[class_ids[i]])
+            l.add(label)
+            # color = colors[i]
+            cv2.rectangle(img, (x,y), (x+w, y+h),(255, 0, 255) , 2)
+            cv2.putText(img, label, (x, y - 5), font, 1, (255, 0, 255), 2)
+    # cv2.imshow("Image", img)
+    return img,l
+
+# function to perform real time object detection
+def detect(frame):
+    model, classes, colors, output_layers = load_data()
+    # cap = start_webcam()
+    lst = ['/','-','\\','|']
+    # i = 0
+    # while True:
+    # read() returns a tuple, first a boolean value which denotes whether the frame is read successfully or not and then returns the whole frame
+    # _, frame = cap.read()
+    # getting the height and weight from the frame
+    height, width, channels = frame.shape
+    # getting the outputs 
+    blob, outputs = detect_objects(frame, model, output_layers)
+
+    boxes, confs, class_ids = get_box_dimensions(outputs, height, width)
+    # function called to plot the contours along with the labels
+    img,l=draw_labels(boxes, confs, colors, class_ids, classes, frame)
+    # os.system('cls' if os.name == 'nt' else 'clear')
+    # print("Detecting........",lst[i],sep="")
+    # i = (i + 1) % 4
+    # key = cv2.waitKey(1)
+    # if key == 27:
+    #     break
+    # cap.release()
+    return list(l),img
+
+# print('---- Real Time object detection ----')
+# ref = RealTimeObjectDetection(0)
+# webcam_detect() 
+# cv2.destroyAllWindows()
